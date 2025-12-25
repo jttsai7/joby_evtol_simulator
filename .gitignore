@@ -1,0 +1,16 @@
+# Build directories
+build/
+bin/
+lib/
+
+# IDE settings
+.vscode/
+.idea/
+*.DS_Store
+
+# Compiled objects
+*.o
+*.a
+*.so
+*.dylib
+*.exe
