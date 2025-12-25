@@ -27,9 +27,21 @@ find_package(Threads REQUIRED)
 
 # --- Main Artifacts ---
 
-add_executable(evtol_sim src/main.cpp)
-
+add_executable(evtol_sim src/main.cpp src/Vehicle.cpp)
 # Use private include scope
 target_include_directories(evtol_sim PRIVATE include)
-
 target_link_libraries(evtol_sim PRIVATE Threads::Threads)
+
+# --- Test Infrastructure ---
+
+# Enable CTest runner
+enable_testing()
+
+# Define the test runner executable, linking against the vehicle logic
+add_executable(test_runner tests/VehicleTest.cpp src/Vehicle.cpp)
+target_include_directories(test_runner PRIVATE include)
+target_link_libraries(test_runner PRIVATE GTest::gtest_main Threads::Threads)
+
+# Automatically discover tests defined in the source code
+include(GoogleTest)
+gtest_discover_tests(test_runner)
