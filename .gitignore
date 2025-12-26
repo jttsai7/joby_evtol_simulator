@@ -1,0 +1,14 @@
+# Build artifacts
+build/
+bin/
+lib/
+*.o
+*.a
+*.so
+
+# IDE settings (VS Code, CLion, etc.)
+.vscode/
+.idea/
+*.swp
+*.DS_Store
+compile_commands.json
