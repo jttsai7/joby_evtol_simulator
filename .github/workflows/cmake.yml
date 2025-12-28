@@ -1,10 +1,14 @@
-name: Build Check
+name: CMake Build & Test
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "**" ]
   pull_request:
     branches: [ "main" ]
+
+env:
+  # Customize the CMake build type
+  BUILD_TYPE: Release
 
 jobs:
   build:
@@ -12,16 +16,21 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Configure CMake
       # Build in a specific directory
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build
-      # Build the target
-      run: cmake --build ${{github.workspace}}/build --config Release
+      # Build the target (evtol_core, evtol_sim, unit_tests)
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
     
     - name: Run Sanity Check
       # Run the executable
       run: ${{github.workspace}}/build/evtol_sim
+    
+    - name: Test
+      # Run Unit Tests
+      working-directory: ${{github.workspace}}/build
+      run: ctest -C ${{env.BUILD_TYPE}} --output-on-failure
