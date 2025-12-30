@@ -1,38 +1,26 @@
+#include "Simulator.h"
 #include <iostream>
-#include <thread>
-#include <vector>
-#include "Aircraft.h" 
 
+/**
+ * Entry point for the eVTOL Simulation Project.
+ * Configured per problem requirements: 20 vehicles, 3 chargers, 3-minute runtime.
+ */
 int main() {
-    // ==========================================
-    // PHASE 1: Environment & Concurrency Check
-    // ==========================================
-    // Just verifying that C++20 and threading headers are working
-    unsigned int n = std::thread::hardware_concurrency();
-    std::cout << "eVTOL Simulation Engine Starting..." << std::endl;
-    std::cout << "Detected " << n << " concurrent threads supported." << std::endl;
-
-    // ==========================================
-    // PHASE 2: Integration & Logic Check
-    // ==========================================
     try {
-        Aircraft alpha(CompanyType::Alpha);
-        
-        // Log initial state to console
-        std::cout << "[OK] Created Aircraft: " << alpha.get_name() << std::endl;
-        std::cout << "     - Battery: " << alpha.get_battery_level() << " kWh" << std::endl;
-        std::cout << "     - State: " << static_cast<int>(alpha.get_state()) << " (0=Flying)" << std::endl;
+        // Configuration: 20 random aircraft, 3 chargers, 3.0 minutes real-world time
+        const int TOTAL_VEHICLES = 20;
+        const int TOTAL_CHARGERS = 3;
+        const double SIM_DURATION_MIN = 3.0;
 
-        // Dry run: Advance simulation by 0.5 hours to verify logic flow
-        alpha.update(0.5); 
-        std::cout << "[OK] Ran update(0.5 hours)" << std::endl;
-        
-        // Check if battery drained as expected
-        std::cout << "     - New Battery: " << alpha.get_battery_level() << " kWh" << std::endl;
+        std::cout << "Joby Aviation eVTOL Simulation Engine" << std::endl;
+        std::cout << "--------------------------------------" << std::endl;
+
+        // Initialize and execute simulation
+        Simulator app(TOTAL_VEHICLES, TOTAL_CHARGERS, SIM_DURATION_MIN);
+        app.run();
 
     } catch (const std::exception& e) {
-        // Catch runtime errors during integration (e.g. invalid config)
-        std::cerr << "[Error] Integration failed: " << e.what() << std::endl;
+        std::cerr << "Fatal error during simulation: " << e.what() << std::endl;
         return 1;
     }
 

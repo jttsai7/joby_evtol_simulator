@@ -3,7 +3,9 @@
 #include <array>
 #include <stdexcept>
 
-// Company types
+/**
+ * Enumeration of eVTOL manufacturers involved in the simulation.
+ */
 enum class CompanyType {
     Alpha = 0,
     Beta,
@@ -13,6 +15,10 @@ enum class CompanyType {
     Count // Helper for array sizing
 };
 
+/**
+ * Immutable configuration defining the physical and operational 
+ * characteristics of a specific aircraft type.
+ */
 struct AircraftConfig {
     std::string name;
     double cruise_speed_mph;

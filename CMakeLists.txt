@@ -9,9 +9,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # --- 1. Core Library ---
-# Separating logic into a library
+# Contains the physics engine, state machine, and multithreaded scheduler
 add_library(evtol_core 
     src/Aircraft.cpp
+    src/Simulator.cpp
 )
 
 target_include_directories(evtol_core PUBLIC include)
@@ -32,6 +33,7 @@ FetchContent_Declare(
   # Fixes CMP0135 warning. Updates extracted timestamps to ensure correct rebuilds.
   DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
+
 # Windows compatibility: Prevent GTest from overriding CRT settings.
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 
