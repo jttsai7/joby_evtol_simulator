@@ -1,15 +1,22 @@
 #include "Aircraft.h"
-#include <algorithm> // std::min
-#include <cmath>     // std::abs
-#include <cstdlib>   // rand
+#include <algorithm>
+#include <random>
 
-Aircraft::Aircraft(CompanyType type)
+Aircraft::Aircraft(CompanyType type, std::shared_ptr<ChargerPool> charger_pool)
     : type_(type),
       config_(AircraftConfig::GetConfig(type)),
-      current_battery_kwh_(config_.battery_capacity_kwh) // Start full
+      current_battery_kwh_(config_.battery_capacity_kwh),
+      charger_pool_(charger_pool),
+      dist_0_1_(0.0, 1.0) 
 {
+    // Thread-safe RNG initialization. 
+    // Using a local random_device to seed the Mersenne Twister engine per aircraft instance.
+    std::random_device rd;
+    rng_.seed(rd());
 }
 
+
+// Core simulation loop for a single aircraft.
 void Aircraft::update(double dt_hours) {
     double remaining_time = dt_hours;
 
@@ -19,29 +26,23 @@ void Aircraft::update(double dt_hours) {
     // we must process the remaining 0.3 min in the NEW state (Waiting).
     // Epsilon (1e-7) prevents infinite loops due to float errors.
     while (remaining_time > 1e-7) {
-        
         double time_consumed = 0.0;
-
         switch (state_) {
             case AircraftState::Flying:
                 time_consumed = process_flying(remaining_time);
                 break;
-                
             case AircraftState::Waiting:
-                // Idle state: just consumes time
-                stats_wait_time_hours_ += remaining_time;
-                time_consumed = remaining_time; 
+                time_consumed = process_waiting(remaining_time);
                 break;
-                
             case AircraftState::Charging:
                 time_consumed = process_charging(remaining_time);
                 break;
         }
-
         remaining_time -= time_consumed;
     }
 }
 
+// Energy consumption and passenger-mile accumulation during flight.
 double Aircraft::process_flying(double available_time) {
     // 1. Calc Power (kW) = Usage (kWh/mi) * Speed (mph)
     double power_kw = config_.energy_use_kwh_mile * config_.cruise_speed_mph;
@@ -50,66 +51,71 @@ double Aircraft::process_flying(double available_time) {
     double max_flight_time = current_battery_kwh_ / power_kw;
 
     // 3. Determine actual time we can fly in this step
-    double actual_flight_time = std::min(available_time, max_flight_time);
+    double actual = std::min(available_time, max_flight_time);
 
     // 4. Update Stats & Physics
-    stats_flight_time_hours_ += actual_flight_time;
-    double distance = actual_flight_time * config_.cruise_speed_mph;
-    stats_passenger_miles_ += distance * config_.passenger_count;
+    stats_.flight_time_hours += actual;
+    stats_.passenger_miles += actual * config_.cruise_speed_mph * config_.passenger_count;
     
-    current_battery_kwh_ -= (power_kw * actual_flight_time);
-
+    current_battery_kwh_ -= (power_kw * actual);
+    
     // 5. Check Faults (based on actual flight duration)
-    check_faults(actual_flight_time);
+    check_faults(actual);
 
-    // 6. Handle Depletion
-    // Spec: "Instantaneously is in line right when it runs out"
+    // 6. By transitioning to 'Waiting', the aircraft enters the resource contention loop
+    // governed by the ChargerPool semaphore.
     if (current_battery_kwh_ <= 1e-4) {
         current_battery_kwh_ = 0.0;
-        state_ = AircraftState::Waiting; // Transition
+        state_ = AircraftState::Waiting;
     }
-
-    return actual_flight_time;
+    
+    return actual;
 }
 
+// Logic for resource acquisition. Attempts to secure a charger from the semaphore pool.
+double Aircraft::process_waiting(double available_time) {
+    // Non-blocking attempt to acquire a charger from the shared pool
+    if (charger_pool_->try_acquire()) {
+        state_ = AircraftState::Charging;
+        
+        // Return 0.0 time consumed to allow the Charging logic to utilize the 
+        // remaining time in the current tick immediately (seamless transition).
+        return 0.0; 
+    }
+    
+    // If no chargers are available, the entire time step is spent waiting
+    stats_.wait_time_hours += available_time;
+    return available_time;
+}
+
+// Logic for battery restoration. Returns the charger to the pool once full.
 double Aircraft::process_charging(double available_time) {
     // Linear charging model
     double charge_rate_kw = config_.battery_capacity_kwh / config_.time_to_charge_hours;
-    
     // Calc time needed to reach 100%
-    double needed_energy = config_.battery_capacity_kwh - current_battery_kwh_;
-    double time_to_full = needed_energy / charge_rate_kw;
+    double energy_needed = config_.battery_capacity_kwh - current_battery_kwh_;
+    double time_to_full = energy_needed / charge_rate_kw;
 
-    double actual_charge_time = std::min(available_time, time_to_full);
+    double actual = std::min(available_time, time_to_full);
 
-    stats_charge_time_hours_ += actual_charge_time;
-    current_battery_kwh_ += charge_rate_kw * actual_charge_time;
+    stats_.charge_time_hours += actual;
+    current_battery_kwh_ += charge_rate_kw * actual;
 
-    // Handle Full Charge
-    // Spec: "Instantaneously reaches Cruise Speed"
+    // State Transition: If battery reaches full capacity, resume flying
     if (current_battery_kwh_ >= config_.battery_capacity_kwh - 1e-4) {
         current_battery_kwh_ = config_.battery_capacity_kwh;
-        state_ = AircraftState::Flying; // Transition
+        state_ = AircraftState::Flying;
+        
+        // Release the charger resource back to the pool for other aircraft
+        charger_pool_->release();
     }
-
-    return actual_charge_time;
+    return actual;
 }
 
+// Monte Carlo simulation of component faults per hour of flight.
 void Aircraft::check_faults(double dt_hours) {
-    // Simple Monte Carlo simulation. 
-    // For Phase 3/Testability, consider injecting a random provider.
-    double random_val = static_cast<double>(std::rand()) / RAND_MAX;
-    if (random_val < (config_.fault_prob_per_hour * dt_hours)) {
-        stats_fault_count_++;
+    // Probability check: rand[0,1] < (fault_rate_per_hour * hours_flown)
+    if (dist_0_1_(rng_) < (config_.fault_prob_per_hour * dt_hours)) {
+        stats_.fault_count++;
     }
-}
-
-void Aircraft::start_charging() {
-    if (state_ == AircraftState::Waiting) {
-        state_ = AircraftState::Charging;
-    }
-}
-
-bool Aircraft::is_fully_charged() const {
-    return current_battery_kwh_ >= config_.battery_capacity_kwh;
 }

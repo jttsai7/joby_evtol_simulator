@@ -19,18 +19,18 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Configure CMake
-      # Build in a specific directory
+      # Prepare build directory and generate makefiles
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
     - name: Build
-      # Build the target (evtol_core, evtol_sim, unit_tests)
+      # Compile the entire project: core library, simulator, and test suite
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
     
-    - name: Run Sanity Check
-      # Run the executable
+    - name: Run Full Simulation
+      # Executes the 3-minute simulation to ensure end-to-end stability
       run: ${{github.workspace}}/build/evtol_sim
     
-    - name: Test
-      # Run Unit Tests
+    - name: Run Unit Tests
+      # Execute GoogleTest suite to verify physics and concurrency logic
       working-directory: ${{github.workspace}}/build
       run: ctest -C ${{env.BUILD_TYPE}} --output-on-failure
