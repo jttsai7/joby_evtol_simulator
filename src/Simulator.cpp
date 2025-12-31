@@ -15,8 +15,8 @@ static constexpr double SIM_DT_HOURS = (TICK_MS / 1000.0) * SIM_SPEEDUP / 3600.0
 // Mutex to prevent console log interleaving from multiple aircraft threads.
 static std::mutex print_mutex;
 
-Simulator::Simulator(int num_aircraft, int num_chargers, double duration_minutes)
-    : num_aircraft_(num_aircraft), duration_minutes_(duration_minutes) 
+Simulator::Simulator(int num_aircraft, int num_chargers, double duration_minutes, TimingMode mode)
+    : num_aircraft_(num_aircraft), duration_minutes_(duration_minutes), mode_(mode) // Initialize mode
 {
     charger_pool_ = std::make_shared<ChargerPool>(num_chargers);
     
@@ -39,7 +39,7 @@ void Simulator::run() {
 
     // Spin up one thread per aircraft to simulate concurrent behavior.
     for (auto& aircraft : fleet_) {
-        threads.emplace_back(worker_thread, aircraft, std::ref(running), SIM_DT_HOURS, TICK_MS);
+        threads.emplace_back(worker_thread, aircraft, std::ref(running), SIM_DT_HOURS, TICK_MS, mode_);
     }
 
     auto start_time = std::chrono::steady_clock::now();
@@ -155,17 +155,38 @@ void Simulator::generate_report() const {
     std::cout << separator << "\n" << std::endl;
 }
 
-void Simulator::worker_thread(std::shared_ptr<Aircraft> aircraft, std::atomic<bool>& running, double sim_dt_hours, int tick_ms) {
+void Simulator::worker_thread(std::shared_ptr<Aircraft> aircraft, 
+                              std::atomic<bool>& running, 
+                              double sim_dt_hours, 
+                              int tick_ms,
+                              TimingMode mode) {
+    
+    // Last wake time is only needed for COMPENSATED mode
+    auto last_wake_time = std::chrono::steady_clock::now();
+
     while (running) {
         auto start = std::chrono::steady_clock::now();
+        double active_dt = sim_dt_hours;
 
-        aircraft->update(sim_dt_hours);
+        // COMPENSATED mode - Compensate for OS scheduling jitter by calculating 
+        // actual elapsed time since the last update
+        if (mode == TimingMode::COMPENSATED) {
+            auto now = std::chrono::steady_clock::now();
+            std::chrono::duration<double> diff = now - last_wake_time;
+            
+            active_dt = (diff.count() * SIM_SPEEDUP) / 3600.0;
+            last_wake_time = now;
+        }
 
-        // Maintain simulation pacing by sleeping for the remainder of the tick.
+        // Execute physics update
+        aircraft->update(active_dt);
+
+        // FIXED mode - maintain simulation pacing by sleeping for the remainder of the tick
         auto end = std::chrono::steady_clock::now();
-        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start); 
         if (elapsed.count() < tick_ms) {
             std::this_thread::sleep_for(std::chrono::milliseconds(tick_ms) - elapsed);
         }
     }
 }
+
