@@ -40,6 +40,13 @@ void Aircraft::update(double dt_hours) {
         }
         remaining_time -= time_consumed;
     }
+    
+    /**
+     * Increment tick count AFTER the precision loop completes.
+     * This represents one successful 'wake-up' cycle where the full
+     * duration of dt_hours has been accounted for across one or more states.
+     */
+    stats_.completed_ticks++;
 }
 
 // Energy consumption and passenger-mile accumulation during flight.

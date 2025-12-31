@@ -24,6 +24,10 @@ private:
                               double sim_dt_hours, 
                               int tick_ms);
 
+    
+    // Data aggregation and reporting logic
+    void generate_report() const;
+
     int num_aircraft_;
     double duration_minutes_;
     
