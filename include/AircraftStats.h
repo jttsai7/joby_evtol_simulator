@@ -10,4 +10,6 @@ struct AircraftStats {
     double wait_time_hours = 0.0;
     double passenger_miles = 0.0;
     int fault_count = 0;
+    // Total simulation steps processed, used for timing fidelity audit.
+    uint64_t completed_ticks = 0;
 };
